@@ -1,0 +1,57 @@
+program      -> procedures main procedures
+
+procedures   -> 
+            | procedures procedure
+
+procedure    -> DEF pidentifier(declarations) declarations BEGIN commands END
+
+main         -> DEF main() declarations BEGIN commands END
+
+declarations -> 
+            | declarations declaration
+
+declaration  -> type absolute_id;
+
+type         -> INT
+            | FLOAT
+
+commands     -> commands command
+            | command
+
+command      -> identifier = expression;
+            | IF condition THEN commands ELSE commands ENDIF
+            | IF condition THEN commands ENDIF
+            | WHILE condition DO commands ENDWHILE
+            | REPEAT commands UNTIL condition;
+            | FOR pidentifier FROM value TO value DO commands ENDFOR
+            | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR
+            | READ identifier;
+            | WRITE value;
+            | CALL pidentifier();
+            | CALL pidentifier(args);
+
+args         -> identifier
+            | args, identifier
+
+expression   -> value
+            | value + value
+            | value - value
+            | value * value
+            | value / value
+            | value % value
+
+condition    -> value == value
+            | value != value
+            | value < value
+            | value > value
+            | value <= value
+            | value >= value
+
+value        -> num
+            | identifier
+
+identifier   -> absolute_id
+            | pidentifier[pidentifier]
+
+absolute_id -> pidentifier
+            | pidentifier[num]

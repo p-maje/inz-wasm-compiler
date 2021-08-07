@@ -1,0 +1,19 @@
+DEF print_countdown (INT start)
+    INT stop;
+BEGIN
+    stop = 0;
+    WHILE start >= stop DO
+        WRITE start;
+        start = start - 1;
+    ENDWHILE
+END
+
+DEF main()
+INT a; INT b[3]; FLOAT c;
+BEGIN
+    a = 1 + 0;
+    b[a] = 3 * 2;
+    CALL print_countdown(a);
+    CALL print_countdown(b[a]);
+    CALL print_countdown(5);
+END
