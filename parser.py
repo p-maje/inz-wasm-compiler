@@ -1,5 +1,7 @@
 from sly import Lexer, Parser
 
+from wasm_generator import WasmGenerator
+
 
 class ImpLexer(Lexer):
     # @_(r'\[[^\]]*\]')
@@ -118,7 +120,7 @@ class ImpParser(Parser):
 
     @_('INT', 'FLOAT')
     def type(self, p):
-        return p[0]
+        return p[0][0] + '64'
 
     @_('commands command')
     def commands(self, p):
@@ -254,4 +256,5 @@ def parse(code: str):
     pars = ImpParser()
     tokens = lex.tokenize(code)
     pars.parse(tokens)
-    return str(pars.code)
+    generator = WasmGenerator(pars.code)
+    return generator.code

@@ -6,6 +6,7 @@
     <title>Compiler</title>
     <link href="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.css" rel="stylesheet">
     <script src="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.js"></script>
+    <script src="https://unpkg.com/wast-loader@1.11.1/lib/index.js"></script>
 </head>
 
 <body>
@@ -24,6 +25,10 @@
         });
         function compile() {
             let code = input.getValue()
+            let importObject = {
+                imports: {write: (arg) => console.log(arg)}
+            }
+
             fetch('/compile', {
                 method: 'POST',
                 body: code,
