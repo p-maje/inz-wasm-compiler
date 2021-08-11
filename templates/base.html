@@ -4,27 +4,36 @@
 <head>
     <meta charset="UTF-8">
     <title>Compiler</title>
+    <link href="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.css" rel="stylesheet">
+    <script src="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.js"></script>
+</head>
+
+<body>
+    <textarea id="input" cols="50" rows="30" style="resize:none;"></textarea>
+    <textarea id="output" cols="50" rows="30" disabled style="resize:none;"></textarea><br>
+    <button onclick="compile()">Compile</button>
     <script>
+        let input = CodeMirror.fromTextArea(document.getElementById('input'), {
+            lineNumbers: true,
+            lineWrapping: true
+        });
+        let output = CodeMirror.fromTextArea(document.getElementById('output'), {
+            lineNumbers: true,
+            lineWrapping: true,
+            readOnly: true
+        });
         function compile() {
-            let input = document.getElementById('input')
-            let output = document.getElementById('output')
-            let code = input.value
+            let code = input.getValue()
             fetch('/compile', {
                 method: 'POST',
                 body: code,
             }).then(
                 (response) => response.text()
             ).then(
-                (code) => output.value = code
+                (code) => output.setValue(code)
             )
         }
     </script>
-</head>
-
-<body>
-    <textarea id="input"></textarea><br>
-    <button onclick="compile()">Compile</button><br>
-    <textarea id="output"></textarea>
 </body>
 
 </html>

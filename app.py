@@ -13,7 +13,12 @@ def hello_world():
 def compile_code():
     code = request.get_data(as_text=True)
     print(code)
-    return parse(code), 200
+    if code:
+        # try:
+        return parse(code), 200
+        # except Exception as e:
+        #     return str(e), 400
+    return code, 400
 
 
 if __name__ == '__main__':

@@ -2,43 +2,38 @@ from sly import Lexer, Parser
 
 
 class ImpLexer(Lexer):
-    @_(r'\[[^\]]*\]')
-    def ignore_comment(self, t):
-        self.lineno += t.value.count('\n')
+    # @_(r'\[[^\]]*\]')
+    # def ignore_comment(self, t):
+    #     self.lineno += t.value.count('\n')
 
     @_(r'\n+')
     def ignore_newline(self, t):
         self.lineno += len(t.value)
 
-    tokens = {DEF, MAIN, BEGIN, END, PID, NUM, IF, THEN, ELSE, ENDIF, WHILE, DO, ENDWHILE, FOR, FROM, TO,
-              DOWNTO, ENDFOR, READ, WRITE, CALL, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT}
+    tokens = {DEF, WITH, MAIN, BEGIN, END, PID, NUM, IF, ELSE, WHILE, FOR, FROM, TO,
+              DOWNTO, READ, WRITE, CALL, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT}
 
-    DEF = r"DEF"
-    BEGIN = r"BEGIN"
-    INT = r"INT"
-    FLOAT = r"FLOAT"
+    DEF = r"def"
+    WITH = r"with"
+    BEGIN = r"{"
+    INT = r"int"
+    FLOAT = r"float"
 
-    ENDWHILE = r"ENDWHILE"
-    ENDFOR = r"ENDFOR"
-    ENDIF = r"ENDIF"
-    END = r"END"
+    END = r"}"
 
-    WHILE = r"WHILE"
-    FOR = r"FOR"
-    IF = r"IF"
+    WHILE = r"while"
+    FOR = r"for"
+    IF = r"if"
+    ELSE = r"else"
 
-    THEN = r"THEN"
-    ELSE = r"ELSE"
+    DOWNTO = r"downto"
+    TO = r"to"
 
-    DOWNTO = r"DOWNTO"
-    DO = r"DO"
-    TO = r"TO"
+    FROM = r"from"
 
-    FROM = r"FROM"
-
-    READ = r"READ"
-    WRITE = r"WRITE"
-    CALL = r"CALL"
+    READ = r"read"
+    WRITE = r"write"
+    CALL = r"call"
 
     NEQ = r"!="
     GEQ = r">="
@@ -64,14 +59,14 @@ class ImpLexer(Lexer):
 
 
 class ImpParser(Parser):
+    debugfile = "parser.out"
     tokens = ImpLexer.tokens
     code = None
-    consts = set()
 
     @_('procedures main')
     def program(self, p):
-        self.code = tuple(p)
-        return p[0], p[1]
+        self.code = {"procedures": p[0], "main": p[1]}
+        return self.code
 
     @_('')
     def procedures(self, p):
@@ -81,29 +76,45 @@ class ImpParser(Parser):
     def procedures(self, p):
         return p[0] + [p[1]]
 
-    @_('DEF PID "(" declarations ")" declarations BEGIN commands END')
+    @_('DEF PID args declarations BEGIN commands END')
     def procedure(self, p):
-        return " ".join(str(e) for e in p)
+        return {"name": p.PID, "args": p.args, "locals": p.declarations, "body": p.commands}
 
     @_('DEF MAIN "(" ")" declarations BEGIN commands END')
     def main(self, p):
-        return tuple(p)
+        return {"name": "main", "locals": p.declarations, "body": p.commands}
 
     @_('')
     def declarations(self, p):
         return []
 
-    @_('declarations declaration')
+    @_('WITH nonempty_args')
     def declarations(self, p):
-        return p[0] + [p[1]]
+        return p[1]
 
-    @_('type PID ";"')
-    def declaration(self, p):
-        return tuple(p)
+    @_('"(" ")"')
+    def args(self, p):
+        return []
 
-    @_('type PID "[" NUM "]" ";"')
+    @_('"(" nonempty_args ")"')
+    def args(self, p):
+        return p.nonempty_args
+
+    @_('declaration')
+    def nonempty_args(self, p):
+        return [p.declaration]
+
+    @_('declaration "," nonempty_args')
+    def nonempty_args(self, p):
+        return [p.declaration] + p.nonempty_args
+
+    @_('type PID "[" NUM "]"')
     def declaration(self, p):
-        return tuple(p)
+        return {"type": p.type, "name": p.PID, "size": p.NUM}
+
+    @_('type PID')
+    def declaration(self, p):
+        return {"type": p.type, "name": p.PID}
 
     @_('INT', 'FLOAT')
     def type(self, p):
@@ -117,51 +128,44 @@ class ImpParser(Parser):
     def commands(self, p):
         return [p[0]]
 
-    @_('identifier GETS expression ";"')
+    @_('identifier GETS expression')
     def command(self, p):
         return "assign", p[0], p[2]
 
-    @_('IF condition THEN commands ELSE commands ENDIF')
+    @_('IF condition BEGIN commands ELSE commands END')
     def command(self, p):
-        resp = "ifelse", p[1], p[3], p[5], self.consts.copy()
-        self.consts.clear()
+        resp = "ifelse", p[1], p[3], p[5]
         return resp
 
-    @_('IF condition THEN commands ENDIF')
+    @_('IF condition BEGIN commands END')
     def command(self, p):
-        resp = "if", p[1], p[3], self.consts.copy()
-        self.consts.clear()
+        resp = "if", p[1], p[3]
         return resp
 
-    @_('WHILE condition DO commands ENDWHILE')
+    @_('WHILE condition BEGIN commands END')
     def command(self, p):
-        resp = "while", p[1], p[3], self.consts.copy()
-        self.consts.clear()
+        resp = "while", p[1], p[3]
         return resp
 
-    @_('FOR PID FROM value TO value DO commands ENDFOR')
+    @_('FOR PID FROM value TO value BEGIN commands END')
     def command(self, p):
-        resp = "forup", p[1], p[3], p[5], p[7], self.consts.copy()
-        self.consts.clear()
+        resp = "forup", p[1], p[3], p[5], p[7]
         return resp
 
-    @_('FOR PID FROM value DOWNTO value DO commands ENDFOR')
+    @_('FOR PID FROM value DOWNTO value BEGIN commands END')
     def command(self, p):
-        resp = "fordown", p[1], p[3], p[5], p[7], self.consts.copy()
-        self.consts.clear()
+        resp = "fordown", p[1], p[3], p[5], p[7]
         return resp
 
-    @_('READ identifier ";"')
+    @_('READ identifier')
     def command(self, p):
         return "read", p[1]
 
-    @_('WRITE value ";"')
+    @_('WRITE value')
     def command(self, p):
-        if p[1][0] == "const":
-            self.consts.add(int(p[1][1]))
         return "write", p[1]
 
-    @_('CALL PID "(" args ")" ";"')
+    @_('CALL PID "(" args ")"')
     def command(self, p):
         return p
 
@@ -232,29 +236,14 @@ class ImpParser(Parser):
     @_('PID')
     def identifier(self, p):
         return p[0]
-        # if p[0] in self.symbols:
-        #     return p[0]
-        # else:
-        #     return "undeclared", p[0]
 
     @_('PID "[" PID "]"')
     def identifier(self, p):
         return p[0], p[2]
-        # if p[0] in self.symbols and type(self.symbols[p[0]]) == Array:
-        #     if p[2] in self.symbols and type(self.symbols[p[2]]) == Variable:
-        #         return "array", p[0], ("load", p[2])
-        #     else:
-        #         return "array", p[0], ("load", ("undeclared", p[2]))
-        # else:
-        #     raise Exception(f"Undeclared array {p[0]}")
 
     @_('PID "[" NUM "]"')
     def identifier(self, p):
         return p[0], p[2]
-        # if p[0] in self.symbols and type(self.symbols[p[0]]) == Array:
-        #     return "array", p[0], p[2]
-        # else:
-        #     raise Exception(f"Undeclared array {p[0]}")
 
     def error(self, token):
         raise Exception(f"Syntax error: '{token.value}' in line {token.lineno}")
@@ -263,7 +252,6 @@ class ImpParser(Parser):
 def parse(code: str):
     lex = ImpLexer()
     pars = ImpParser()
-
-    pars.parse(lex.tokenize(code))
+    tokens = lex.tokenize(code)
+    pars.parse(tokens)
     return str(pars.code)
-
