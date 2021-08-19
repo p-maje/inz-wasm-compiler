@@ -23,12 +23,9 @@
             lineWrapping: true,
             readOnly: true
         });
+        input.setValue("def main() { write 11 }")
         function compile() {
             let code = input.getValue()
-            let importObject = {
-                imports: {write: (arg) => console.log(arg)}
-            }
-
             fetch('/compile', {
                 method: 'POST',
                 body: code,
@@ -37,6 +34,19 @@
             ).then(
                 (code) => output.setValue(code)
             )
+        }
+
+        function run() {
+            let code = output.getValue()
+            let importObject = {
+                imports: {write: (arg) => console.log(arg)}
+            }
+
+            WebAssembly.instantiateStreaming(fetch('/run', {
+                method: 'POST',
+                body: code,
+                response_type: 'application/wasm'
+            }), importObject).then(obj => obj.instance.exports.main())
         }
     </script>
 </body>

@@ -61,7 +61,6 @@ class ImpLexer(Lexer):
 
 
 class ImpParser(Parser):
-    debugfile = "parser.out"
     tokens = ImpLexer.tokens
     code = None
 

@@ -13,6 +13,8 @@ class WasmGenerator:
         main = parsed_code['main']
         self.code += '(func $main \n'
         self.extract_variables(main['locals'], 'local')
+        self.code += "i64.const 2137\n"
+        self.code += "call $~write_i\n"
         self.code += ") \n"
         self.code += '(export "main" (func $main)) \n'
         self.code += ") \n"
