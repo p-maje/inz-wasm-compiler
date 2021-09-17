@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from dataclasses import dataclass
 from typing import List, Tuple
 
 
@@ -48,11 +47,13 @@ class Expression(Value):
     def __init__(self, operands, operation):
         self.operands = operands
         self.operation = operation
-        self.type = "f64" if any(op.type == "f64" for op in operands) else "i64"
+        if operands[0].type != operands[1].type:
+            raise Exception("Type mismatch")
+        self.type = operands[0].type
 
     def load(self) -> str:
-        value = "\n".join(f"({op.load()})" for op in self.operands)
-        return f"({self.type}.{self.operation} {value})"
+        value = "\n".join(f"{op.load()}" for op in self.operands)
+        return value + "\n" + f"{self.type}.{self.operation}"
 
 
 class Command:
@@ -84,4 +85,18 @@ class AssignCommand(Command):
             raise Exception("Type mismatch")
 
     def extract(self) -> str:
-        return f"(local.set ${self.target.name} {self.value.load()})"
+        return "\n".join([self.value.load(), f"local.set ${self.target.name}"])
+
+
+class CallCommand(Command):
+    callee: str
+    args: List[Value]
+
+    def __init__(self, callee, args):
+        self.callee = callee
+        self.args = args
+
+    def extract(self) -> str:
+        instructions = [arg.load() for arg in self.args] + [f"call ${self.callee}"]
+        return "\n".join(instructions)
+

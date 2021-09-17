@@ -4,16 +4,16 @@ from intermediate_code import Command
 class WasmGenerator:
     def __init__(self, parsed_code):
         self.code = '(module \n'\
-                     '(func $~write_i64 (import "imports" "write") (param i64)) \n'\
-                     '(func $~write_f64 (import "imports" "write") (param f64)) \n'
+                     '(func $~write_i32 (import "imports" "write") (param i32)) \n'\
+                     '(func $~write_f32 (import "imports" "write") (param f32)) \n'
 
         for procedure in parsed_code['procedures']:
-            self.code += f'(func {procedure["name"]} \n'
+            self.code += f'(func ${procedure["name"]} \n'
             self.extract_variables(procedure['args'], 'param')
             self.extract_variables(procedure['locals'], 'local')
             for command in procedure['body']:
-                if issubclass(command, Command):
-                    self.code += command.extract()
+                self.code += command.extract()
+                self.code += "\n"
             self.code += ") \n"
 
         main = parsed_code['main']

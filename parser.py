@@ -1,6 +1,6 @@
 from sly import Lexer, Parser
 
-from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression
+from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand
 from wasm_generator import WasmGenerator
 
 
@@ -131,7 +131,7 @@ class ImpParser(Parser):
 
     @_('INT', 'FLOAT')
     def type(self, p):
-        return p[0][0] + '64'
+        return p[0][0] + '32'
 
     @_('commands command')
     def commands(self, p):
@@ -174,21 +174,21 @@ class ImpParser(Parser):
     def command(self, p):
         return IOCommand("read", p.identifier)
 
-    @_('WRITE value')
+    @_('WRITE expression')
     def command(self, p):
-        return IOCommand("write", p.value)
+        return IOCommand("write", p.expression)
 
     @_('CALL PID "(" args ")"')
     def command(self, p):
-        return p
+        return CallCommand(p.PID, p.args)
 
     @_('value')
     def args(self, p):
-        return p[0]
+        return [p.value]
 
     @_('args "," value')
     def args(self, p):
-        return p[0]
+        return p.args + [p.value]
 
     @_('value')
     def expression(self, p):
@@ -208,11 +208,11 @@ class ImpParser(Parser):
 
     @_('value "/" value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "div")
+        return Expression([p[0], p[2]], "div_u")
 
     @_('value "%" value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "mod")
+        return Expression([p[0], p[2]], "mod_u")
 
     @_('value EQ value')
     def condition(self, p):
@@ -240,11 +240,11 @@ class ImpParser(Parser):
 
     @_('NUM_INT')
     def value(self, p):
-        return Const(int(p[0]), "i64")
+        return Const(int(p[0]), "i32")
 
     @_('NUM_FLOAT')
     def value(self, p):
-        return Const(float(p[0]), "f64")
+        return Const(float(p[0]), "f32")
 
     @_('identifier')
     def value(self, p):
