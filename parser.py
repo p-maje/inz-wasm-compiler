@@ -130,7 +130,7 @@ class ImpParser(Parser):
     @_('type PID')
     def declaration(self, p):
         self.locals[p.PID] = p.type
-        return Local(p.PID, p.type)
+        return Local(p.lineno, p.PID, p.type)
 
     @_('INT', 'FLOAT')
     def type(self, p):
@@ -146,7 +146,7 @@ class ImpParser(Parser):
 
     @_('identifier GETS expression')
     def command(self, p):
-        return AssignCommand(p[0], p[2])
+        return AssignCommand(p.lineno, p[0], p[2])
 
     @_('IF condition BEGIN commands ELSE commands END')
     def command(self, p):
@@ -187,11 +187,11 @@ class ImpParser(Parser):
 
     @_('RETURN expression')
     def command(self, p):
-        return ReturnCommand(p.expression)
+        return ReturnCommand(p.lineno, p.expression)
 
     @_('PID "(" args ")"')
     def function_call(self, p):
-        return FunctionCall(p.PID, p.args)
+        return FunctionCall(p.lineno, p.PID, p.args)
 
     @_('value')
     def args(self, p):
@@ -207,23 +207,23 @@ class ImpParser(Parser):
 
     @_('assignable_value "+" assignable_value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "add")
+        return Expression(p.lineno, (p[0], p[2]), "add")
 
     @_('assignable_value "-" assignable_value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "sub")
+        return Expression(p.lineno, (p[0], p[2]), "sub")
 
     @_('assignable_value "*" assignable_value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "mul")
+        return Expression(p.lineno, (p[0], p[2]), "mul")
 
     @_('assignable_value "/" assignable_value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "div_u")
+        return Expression(p.lineno, (p[0], p[2]), "div_u")
 
     @_('assignable_value "%" assignable_value')
     def expression(self, p):
-        return Expression([p[0], p[2]], "mod_u")
+        return Expression(p.lineno, (p[0], p[2]), "mod_u")
 
     @_('assignable_value EQ assignable_value')
     def condition(self, p):
@@ -267,9 +267,7 @@ class ImpParser(Parser):
 
     @_('PID')
     def identifier(self, p):
-        if p.PID in self.locals:
-            return Local(p.PID, self.locals[p.PID])
-        raise Exception(f"Unknown variable {p.PID}")
+        return Local(p.lineno, p.PID)
 
     @_('PID "[" PID "]"')
     def identifier(self, p):
