@@ -1,7 +1,7 @@
 from sly import Lexer, Parser
 
-from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand
-from wasm_generator import WasmGenerator
+from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, Function, \
+    Module, FunctionCall
 
 
 class ImpLexer(Lexer):
@@ -14,7 +14,7 @@ class ImpLexer(Lexer):
         self.lineno += len(t.value)
 
     tokens = {DEF, WITH, MAIN, BEGIN, END, PID, NUM_FLOAT, NUM_INT, IF, ELSE, WHILE, FOR, FROM, TO,
-              DOWNTO, READ, WRITE, CALL, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT}
+              DOWNTO, READ, WRITE, RETURN, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT}
 
     DEF = r"def"
     WITH = r"with"
@@ -36,7 +36,7 @@ class ImpLexer(Lexer):
 
     READ = r"read"
     WRITE = r"write"
-    CALL = r"call"
+    RETURN = r"return"
 
     NEQ = r"!="
     GEQ = r">="
@@ -76,8 +76,7 @@ class ImpParser(Parser):
 
     @_('procedures main')
     def program(self, p):
-        self.code = {"procedures": p[0], "main": p[1]}
-        return self.code
+        return Module(p.procedures + [p.main])
 
     @_('')
     def procedures(self, p):
@@ -89,11 +88,15 @@ class ImpParser(Parser):
 
     @_('DEF PID args declarations BEGIN commands END')
     def procedure(self, p):
-        return {"name": p.PID, "args": p.args, "locals": p.declarations, "body": p.commands}
+        return Function(p.PID, p.args, p.declarations, p.commands)
+
+    @_('type PID args declarations BEGIN commands END')
+    def procedure(self, p):
+        return Function(p.PID, p.args, p.declarations, p.commands, p.type)
 
     @_('DEF MAIN "(" ")" declarations BEGIN commands END')
     def main(self, p):
-        return {"name": "main", "locals": p.declarations, "body": p.commands}
+        return Function("main", [], p.declarations, p.commands)
 
     @_('')
     def declarations(self, p):
@@ -127,7 +130,7 @@ class ImpParser(Parser):
     @_('type PID')
     def declaration(self, p):
         self.locals[p.PID] = p.type
-        return {"type": p.type, "name": p.PID}
+        return Local(p.PID, p.type)
 
     @_('INT', 'FLOAT')
     def type(self, p):
@@ -178,9 +181,17 @@ class ImpParser(Parser):
     def command(self, p):
         return IOCommand("write", p.expression)
 
-    @_('CALL PID "(" args ")"')
+    @_('function_call')
     def command(self, p):
-        return CallCommand(p.PID, p.args)
+        return CallCommand(p.function_call)
+
+    @_('RETURN expression')
+    def command(self, p):
+        return ReturnCommand(p.expression)
+
+    @_('PID "(" args ")"')
+    def function_call(self, p):
+        return FunctionCall(p.PID, p.args)
 
     @_('value')
     def args(self, p):
@@ -190,53 +201,57 @@ class ImpParser(Parser):
     def args(self, p):
         return p.args + [p.value]
 
-    @_('value')
+    @_('assignable_value')
     def expression(self, p):
         return p[0]
 
-    @_('value "+" value')
+    @_('assignable_value "+" assignable_value')
     def expression(self, p):
         return Expression([p[0], p[2]], "add")
 
-    @_('value "-" value')
+    @_('assignable_value "-" assignable_value')
     def expression(self, p):
         return Expression([p[0], p[2]], "sub")
 
-    @_('value "*" value')
+    @_('assignable_value "*" assignable_value')
     def expression(self, p):
         return Expression([p[0], p[2]], "mul")
 
-    @_('value "/" value')
+    @_('assignable_value "/" assignable_value')
     def expression(self, p):
         return Expression([p[0], p[2]], "div_u")
 
-    @_('value "%" value')
+    @_('assignable_value "%" assignable_value')
     def expression(self, p):
         return Expression([p[0], p[2]], "mod_u")
 
-    @_('value EQ value')
+    @_('assignable_value EQ assignable_value')
     def condition(self, p):
         return "eq", p[0], p[2]
 
-    @_('value NEQ value')
+    @_('assignable_value NEQ assignable_value')
     def condition(self, p):
         return "ne", p[0], p[2]
 
-    @_('value LT value')
+    @_('assignable_value LT assignable_value')
     def condition(self, p):
         return "lt", p[0], p[2]
 
-    @_('value GT value')
+    @_('assignable_value GT assignable_value')
     def condition(self, p):
         return "gt", p[0], p[2]
 
-    @_('value LEQ value')
+    @_('assignable_value LEQ assignable_value')
     def condition(self, p):
         return "le", p[0], p[2]
 
-    @_('value GEQ value')
+    @_('assignable_value GEQ assignable_value')
     def condition(self, p):
         return "ge", p[0], p[2]
+
+    @_("value", "function_call")
+    def assignable_value(self, p):
+        return p[0]
 
     @_('NUM_INT')
     def value(self, p):
@@ -278,6 +293,4 @@ def parse(code: str):
     lex = ImpLexer()
     pars = ImpParser()
     tokens = lex.tokenize(code)
-    pars.parse(tokens)
-    generator = WasmGenerator(pars.code)
-    return generator.code
+    return pars.parse(tokens).generate_code()

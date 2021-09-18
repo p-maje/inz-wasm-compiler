@@ -17,10 +17,10 @@ def compile_code():
     code = request.get_data(as_text=True)
     print(code)
     if code:
-        # try:
-        return parse(code), 200
-        # except Exception as e:
-        #     return str(e), 400
+        try:
+            return parse(code), 200
+        except Exception as e:
+            return str(e), 400
     return code, 400
 
 

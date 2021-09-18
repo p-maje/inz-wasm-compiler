@@ -7,11 +7,28 @@
     <link href="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.css" rel="stylesheet">
     <script src="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.js"></script>
     <script src="https://unpkg.com/wast-loader@1.11.1/lib/index.js"></script>
+    <style>
+        body {
+            background: #333333;
+        }
+        .editors {
+            display: flex;
+            flex-flow: row nowrap;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .editors > * {
+            width: 45%;
+        }
+    </style>
 </head>
 
 <body>
-    <textarea id="input" cols="50" rows="30" style="resize:none;"></textarea>
-    <textarea id="output" cols="50" rows="30" disabled style="resize:none;"></textarea><br>
+    <div class="editors">
+        <textarea id="input" rows="30" style="resize:none;"></textarea>
+        <textarea id="output" rows="30" disabled style="resize:none;"></textarea><br>
+    </div>
+
     <button onclick="compile()">Compile</button>
     <script>
         let input = CodeMirror.fromTextArea(document.getElementById('input'), {
