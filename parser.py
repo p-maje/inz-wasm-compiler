@@ -1,7 +1,7 @@
 from sly import Lexer, Parser
 
 from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, Function, \
-    Module, FunctionCall
+    Module, FunctionCall, IfCommand
 
 
 class ImpLexer(Lexer):
@@ -148,15 +148,13 @@ class ImpParser(Parser):
     def command(self, p):
         return AssignCommand(p.lineno, p[0], p[2])
 
-    @_('IF condition BEGIN commands ELSE commands END')
+    @_('IF condition BEGIN commands END ELSE BEGIN commands END')
     def command(self, p):
-        resp = "ifelse", p[1], p[3], p[5]
-        return resp
+        return IfCommand(p.condition, p[3], p[7])
 
     @_('IF condition BEGIN commands END')
     def command(self, p):
-        resp = "if", p[1], p[3]
-        return resp
+        return IfCommand(p.condition, p.commands, [])
 
     @_('WHILE condition BEGIN commands END')
     def command(self, p):
@@ -227,31 +225,31 @@ class ImpParser(Parser):
 
     @_('assignable_value "%" assignable_value')
     def expression(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "mod_u")
+        return Expression(p.lineno, (p[0], p[2]), "rem_u")
 
     @_('assignable_value EQ assignable_value')
     def condition(self, p):
-        return "eq", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "eq")
 
     @_('assignable_value NEQ assignable_value')
     def condition(self, p):
-        return "ne", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "ne")
 
     @_('assignable_value LT assignable_value')
     def condition(self, p):
-        return "lt", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "lt_u")
 
     @_('assignable_value GT assignable_value')
     def condition(self, p):
-        return "gt", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "gt_u")
 
     @_('assignable_value LEQ assignable_value')
     def condition(self, p):
-        return "le", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "le_u")
 
     @_('assignable_value GEQ assignable_value')
     def condition(self, p):
-        return "ge", p[0], p[2]
+        return Expression(p.lineno, (p[0], p[2]), "ge_u")
 
     @_("value", "function_call")
     def assignable_value(self, p):

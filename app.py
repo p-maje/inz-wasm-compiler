@@ -1,3 +1,5 @@
+import traceback
+
 from flask import Flask, render_template, request, make_response
 from parser import parse
 import subprocess
@@ -20,6 +22,7 @@ def compile_code():
         try:
             return parse(code), 200
         except Exception as e:
+            print(traceback.format_exc())
             if re.match(r"\d+:", str(e)):
                 return str(e), 400
             return "0:" + str(e), 400

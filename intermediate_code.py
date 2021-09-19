@@ -129,7 +129,7 @@ class AssignCommand(Command):
         self.value = value
 
     def extract(self, depth: int) -> List[str]:
-        if self.target.type != self.value.get_type():
+        if self.target.get_type() != self.value.get_type():
             raise CompilerException(f"{self.lineno}: Type mismatch")
         return self.value.load(depth) + [depth * TAB + f"local.set ${self.target.name}"]
 
@@ -156,6 +156,25 @@ class CallCommand(Command):
         instructions = self.call.load(depth)
         if function_table[self.call.callee].return_type is not None:
             instructions += [depth * TAB + 'drop']
+        return instructions
+
+
+class IfCommand(Command):
+    def __init__(self, condition: Expression, commands_if: List[Command], commands_else: List[Command]):
+        self.condition = condition
+        self.commands_if = commands_if
+        self.commands_else = commands_else
+
+    def extract(self, depth: int) -> List[str]:
+        instructions = self.condition.load(depth)
+        instructions += [depth * TAB + "if"]
+        for command in self.commands_if:
+            instructions += command.extract(depth + 1)
+        if self.commands_else:
+            instructions += [depth * TAB + "else"]
+            for command in self.commands_else:
+                instructions += command.extract(depth + 1)
+        instructions += [depth * TAB + "end"]
         return instructions
 
 
