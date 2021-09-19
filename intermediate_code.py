@@ -7,6 +7,10 @@ current_function: 'Function'
 local_vars = dict()
 
 
+class CompilerException(Exception):
+    pass
+
+
 class Value:
     @abstractmethod
     def load(self, depth: int) -> List[str]:
@@ -42,7 +46,7 @@ class Local(Value):
         if self.type:
             return self.type
         if self.name not in local_vars:
-            raise Exception(f"{self.lineno}: Variable {self.name} not declared")
+            raise CompilerException(f"{self.lineno}: Variable '{self.name}' not declared")
         self.type = local_vars[self.name].type
         return self.type
 
@@ -64,16 +68,16 @@ class FunctionCall(Value):
     def load(self, depth: int) -> List[str]:
         function = function_table[self.callee]
         if len(function.args) != len(self.args):
-            raise Exception(f"{self.lineno}: Function {self.callee} expected {len(function.args)} arguments, got {len(self.args)}")
+            raise CompilerException(f"{self.lineno}: Function {self.callee} expected {len(function.args)} arguments, got {len(self.args)}")
         for arg, expected in zip(self.args, function.args):
             if arg.get_type() != expected.get_type():
-                raise Exception(f"{self.lineno}: Argument {expected.name} is of type {expected.get_type()}, got {arg.get_type()}")
+                raise CompilerException(f"{self.lineno}: Argument {expected.name} is of type {expected.get_type()}, got {arg.get_type()}")
         return [instruction for arg in self.args for instruction in arg.load(depth)] + \
                [depth * TAB + f"call ${self.callee}"]
 
     def get_type(self) -> str:
         if self.callee not in function_table:
-            raise Exception(f"{self.lineno}: Function {self.callee} not found")
+            raise CompilerException(f"{self.lineno}: Function '{self.callee}' not found")
         return function_table[self.callee].return_type
 
 
@@ -89,7 +93,7 @@ class Expression(Value):
 
     def get_type(self) -> str:
         if self.operands[0].get_type() != self.operands[1].get_type():
-            raise Exception(f"{self.lineno}: Type mismatch")
+            raise CompilerException(f"{self.lineno}: Type mismatch")
         return self.operands[0].get_type()
 
 
@@ -103,12 +107,16 @@ class IOCommand(Command):
     operation: str
     value: Value
 
-    def __init__(self, operation, value):
+    def __init__(self, lineno, operation, value):
+        self.lineno = lineno
         self.operation = operation
         self.value = value
 
     def extract(self, depth: int) -> List[str]:
-        return self.value.load(depth) + [depth * TAB + f"call $~{self.operation}_{self.value.get_type()}"]
+        val_type = self.value.get_type()
+        if not val_type:
+            raise CompilerException(f"{self.lineno}: Expression has no value")
+        return self.value.load(depth) + [depth * TAB + f"call $~{self.operation}_{val_type}"]
 
 
 class AssignCommand(Command):
@@ -122,7 +130,7 @@ class AssignCommand(Command):
 
     def extract(self, depth: int) -> List[str]:
         if self.target.type != self.value.get_type():
-            raise Exception(f"{self.lineno}: Type mismatch")
+            raise CompilerException(f"{self.lineno}: Type mismatch")
         return self.value.load(depth) + [depth * TAB + f"local.set ${self.target.name}"]
 
 
@@ -135,7 +143,7 @@ class ReturnCommand(Command):
 
     def extract(self, depth: int) -> List[str]:
         if current_function.return_type != self.value.get_type():
-            raise Exception(f"{self.lineno}: Return type of function {current_function.name} should be "
+            raise CompilerException(f"{self.lineno}: Return type of function '{current_function.name}' should be "
                             f"{current_function.return_type}, is {self.value.get_type()}")
         return self.value.load(depth)
 
@@ -174,6 +182,10 @@ class Function:
             local_vars.update({var.name: var for var in self.locals})
         for command in self.commands:
             instructions.extend(command.extract(1))
+            if isinstance(command, ReturnCommand):
+                break
+        else:
+            pass  # TODO check if it returns
         instructions.append(")")
         return [TAB + instruction for instruction in instructions]
 

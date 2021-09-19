@@ -20,7 +20,9 @@ def compile_code():
         try:
             return parse(code), 200
         except Exception as e:
-            return str(e), 400
+            if re.match(r"\d+:", str(e)):
+                return str(e), 400
+            return "0:" + str(e), 400
     return code, 400
 
 

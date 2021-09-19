@@ -60,7 +60,7 @@ class ImpLexer(Lexer):
         return t
 
     def error(self, t):
-        raise Exception(f"Illegal character '{t.value[0]}'")
+        raise Exception(f"{t.lineno}: Illegal character '{t.value[0]}'")
 
     literals = {'+', '-', '*', '/', '%', ',', ';', '[', ']', '(', ')'}
     ignore = ' \t'
@@ -175,11 +175,11 @@ class ImpParser(Parser):
 
     @_('READ identifier')
     def command(self, p):
-        return IOCommand("read", p.identifier)
+        return IOCommand(p.lineno, "read", p.identifier)
 
     @_('WRITE expression')
     def command(self, p):
-        return IOCommand("write", p.expression)
+        return IOCommand(p.lineno, "write", p.expression)
 
     @_('function_call')
     def command(self, p):
@@ -188,6 +188,10 @@ class ImpParser(Parser):
     @_('RETURN expression')
     def command(self, p):
         return ReturnCommand(p.lineno, p.expression)
+
+    @_('PID "(" ")"')
+    def function_call(self, p):
+        return FunctionCall(p.lineno, p.PID, [])
 
     @_('PID "(" args ")"')
     def function_call(self, p):
@@ -284,7 +288,7 @@ class ImpParser(Parser):
         raise Exception(f"Unknown array {p[0]}")
 
     def error(self, token):
-        raise Exception(f"Syntax error: '{token.value}' in line {token.lineno}")
+        raise Exception(f"{token.lineno}: Syntax error '{token.value}'")
 
 
 def parse(code: str):

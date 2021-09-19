@@ -4,14 +4,21 @@
 <head>
     <meta charset="UTF-8">
     <title>Compiler</title>
-    <link href="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.css" rel="stylesheet">
-    <script src="https://pagecdn.io/lib/codemirror/5.61.0/codemirror.js"></script>
+    <link href="https://pagecdn.io/lib/codemirror/5.62.3/codemirror.css" rel="stylesheet">
+    <script src="https://pagecdn.io/lib/codemirror/5.62.3/codemirror.js"></script>
+    <script src="https://pagecdn.io/lib/codemirror/5.62.3/addon/edit/closebrackets.min.js"></script>
     <script src="https://unpkg.com/wast-loader@1.11.1/lib/index.js"></script>
     <style>
         body {
             background: #333333;
         }
+        .error-line {
+            background: red!important;
+            color: white!important;
+        }
         .compilation-error {
+            font-size: 0.65rem;
+            padding: 4px;
             color: red;
         }
         .editors {
@@ -36,18 +43,22 @@
     <script>
         let input = CodeMirror.fromTextArea(document.getElementById('input'), {
             lineNumbers: true,
-            lineWrapping: true
+            lineWrapping: true,
+            autoCloseBrackets: true
         });
         let output = CodeMirror.fromTextArea(document.getElementById('output'), {
             lineNumbers: true,
             lineWrapping: true,
             readOnly: true
         });
-        let errors = []
-        input.setValue("def main() { write 11 }")
+        let error = null
+        input.setValue("def main() {\n\twrite 11\n}")
         function compile() {
             let code = input.getValue()
-            errors.forEach((widget) => input.removeLineWidget(widget))
+            if (error !== null) {
+                input.removeLineClass(error.line, "text", "error-line")
+                input.removeLineWidget(error.widget)
+            }
 
             fetch('/compile', {
                 method: 'POST',
@@ -59,11 +70,16 @@
                     obj.text.then(
                         (text) => {
                             if (obj.status === 400) {
+                                console.log(text)
+
                                 let tokens = text.split(":")
                                 let element = document.createElement("div")
-                                element.appendChild(document.createTextNode(tokens[1]))
+                                element.appendChild(document.createTextNode("🡱 " + tokens[1]))
                                 element.className = "compilation-error"
-                                errors.push(input.addLineWidget(tokens[0] - 1, element))
+                                error = {
+                                    line: input.addLineClass(tokens[0] - 1, "text", "error-line"),
+                                    widget: input.addLineWidget(tokens[0] - 1, element)
+                                }
                             }
                             output.setValue(text)
                         }
