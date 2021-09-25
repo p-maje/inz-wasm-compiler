@@ -6,6 +6,7 @@ function_table = dict()
 current_function: 'Function'
 local_vars = dict()
 iterators = set()
+active_iterators = set()
 active_loops = 0
 
 class CompilerException(Exception):
@@ -46,7 +47,7 @@ class Local(Value):
     def get_type(self) -> str:
         if self.type:
             return self.type
-        if self.name in iterators:
+        if self.name in active_iterators:
             self.type = "i32"
         else:
             if self.name not in local_vars:
@@ -190,8 +191,15 @@ class WhileLoop(Command):
 
     @staticmethod
     def _invert_condition(condition):
-        condition.operation = \
-            f"{'g' if condition.operation[0] == 'l' else 'l'}{'t' if condition.operation[1] == 'e' else 'e'}_s"
+        inverses = {
+            "le_s": "gt_s",
+            "lt_s": "ge_s",
+            "ge_s": "lt_s",
+            "gt_s": "le_s",
+            "eq": "ne",
+            "ne": "eq",
+        }
+        condition.operation = inverses[condition.operation]
         return condition
 
     def extract(self, depth: int) -> List[str]:
@@ -223,6 +231,7 @@ class ForLoop(Command):
         if self.iterator_name in iterators:
             raise CompilerException(f"{self.lineno}: Iterator shadows a previous iterator {self.iterator_name}")
         iterators.add(self.iterator_name)
+        active_iterators.add(self.iterator_name)
         iterator = Local(self.lineno, self.iterator_name, "i32")
         instructions = AssignCommand(self.lineno, iterator, self.start).extract(depth)
 
@@ -239,6 +248,7 @@ class ForLoop(Command):
         instructions += AssignCommand(self.lineno, iterator, iterator_update).extract(depth + 1)
 
         instructions += [(depth + 1) * TAB + f"br {loop_name}", depth * TAB + f"))"]
+        active_iterators.remove(self.iterator_name)
         return instructions
 
 

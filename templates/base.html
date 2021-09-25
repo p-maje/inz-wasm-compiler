@@ -12,6 +12,9 @@
         body {
             background: #333333;
         }
+        * {
+            box-sizing: border-box;
+        }
         .error-line {
             background: red!important;
             color: white!important;
@@ -22,30 +25,52 @@
             color: red;
         }
         .editors {
+            height: 550px;
             display: flex;
-            flex-flow: row nowrap;
+            flex-flow: column wrap;
             justify-content: space-between;
+            align-content: center;
             width: 100%;
         }
         .editors > * {
+            margin-right: 20px;
             width: 45%;
+        }
+        textarea {
+            resize: none;
+        }
+        #console {
+            width: 45%;
+            height: 215px;
+            margin-top: 20px;
+            border: 0.25rem solid white;
+            background: inherit;
+            color: white;
+            font-weight: bold;
+            padding: 0.5rem;
+        }
+        .CodeMirror {
+            height: 315px;
         }
     </style>
 </head>
 
 <body>
     <div class="editors">
-        <textarea id="input" rows="30" style="resize:none;"></textarea>
-        <textarea id="output" rows="30" disabled style="resize:none;"></textarea><br>
+        <textarea id="input"></textarea>
+        <button onclick="compile()">Compile</button>
+        <button onclick="run()">Run</button>
+        <textarea id="output" disabled></textarea>
+        <textarea id="console" disabled></textarea>
     </div>
-
-    <button onclick="compile()">Compile</button>
+    
     <script>
         let input = CodeMirror.fromTextArea(document.getElementById('input'), {
             lineNumbers: true,
             lineWrapping: true,
             autoCloseBrackets: true
         });
+        input.setSize("", "500px")
         let output = CodeMirror.fromTextArea(document.getElementById('output'), {
             lineNumbers: true,
             lineWrapping: true,
@@ -90,15 +115,20 @@
 
         function run() {
             let code = output.getValue()
+            let console_area = document.getElementById("console")
             let importObject = {
-                imports: {write: (arg) => console.log(arg)}
+                imports: {write: (arg) => console_area.value += '> ' + arg + '\n'}
             }
 
+            console_area.value = ''
             WebAssembly.instantiateStreaming(fetch('/run', {
                 method: 'POST',
                 body: code,
                 response_type: 'application/wasm'
-            }), importObject).then(obj => obj.instance.exports.main())
+            }), importObject).then(obj => {
+                obj.instance.exports.main()
+                console_area.value += 'DONE\n'
+            })
         }
     </script>
 </body>
