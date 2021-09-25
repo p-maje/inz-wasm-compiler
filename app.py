@@ -39,6 +39,7 @@ def run_code():
         result = subprocess.run(["wat2wasm", tmp_file, "-o", "/dev/stdout"], stdout=subprocess.PIPE)
         binary = result.stdout
         os.remove(tmp_file)
+
         resp = make_response(binary, 200)
         resp.mimetype = 'application/wasm'
         return resp

@@ -1,7 +1,7 @@
 from sly import Lexer, Parser
 
-from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, Function, \
-    Module, FunctionCall, IfCommand
+from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, \
+    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop
 
 
 class ImpLexer(Lexer):
@@ -49,12 +49,12 @@ class ImpLexer(Lexer):
 
     PID = r"[_a-z]+"
 
-    @_(r'\d+\.\d+')
+    @_(r'-?\d+\.\d+')
     def NUM_FLOAT(self, t):
         t.value = float(t.value)
         return t
 
-    @_(r'\d+')
+    @_(r'-?\d+')
     def NUM_INT(self, t):
         t.value = int(t.value)
         return t
@@ -158,18 +158,15 @@ class ImpParser(Parser):
 
     @_('WHILE condition BEGIN commands END')
     def command(self, p):
-        resp = "while", p[1], p[3]
-        return resp
+        return WhileLoop(p.lineno, p.condition, p.commands)
 
     @_('FOR PID FROM value TO value BEGIN commands END')
     def command(self, p):
-        resp = "forup", p[1], p[3], p[5], p[7]
-        return resp
+        return ForLoop(p.lineno, p.PID, p[3], p[5], "up", p[7])
 
     @_('FOR PID FROM value DOWNTO value BEGIN commands END')
     def command(self, p):
-        resp = "fordown", p[1], p[3], p[5], p[7]
-        return resp
+        return ForLoop(p.lineno, p.PID, p[3], p[5], "down", p[7])
 
     @_('READ identifier')
     def command(self, p):
@@ -221,11 +218,11 @@ class ImpParser(Parser):
 
     @_('assignable_value "/" assignable_value')
     def expression(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "div_u")
+        return Expression(p.lineno, (p[0], p[2]), "div_s")
 
     @_('assignable_value "%" assignable_value')
     def expression(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "rem_u")
+        return Expression(p.lineno, (p[0], p[2]), "rem_s")
 
     @_('assignable_value EQ assignable_value')
     def condition(self, p):
@@ -237,19 +234,19 @@ class ImpParser(Parser):
 
     @_('assignable_value LT assignable_value')
     def condition(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "lt_u")
+        return Expression(p.lineno, (p[0], p[2]), "lt_s")
 
     @_('assignable_value GT assignable_value')
     def condition(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "gt_u")
+        return Expression(p.lineno, (p[0], p[2]), "gt_s")
 
     @_('assignable_value LEQ assignable_value')
     def condition(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "le_u")
+        return Expression(p.lineno, (p[0], p[2]), "le_s")
 
     @_('assignable_value GEQ assignable_value')
     def condition(self, p):
-        return Expression(p.lineno, (p[0], p[2]), "ge_u")
+        return Expression(p.lineno, (p[0], p[2]), "ge_s")
 
     @_("value", "function_call")
     def assignable_value(self, p):

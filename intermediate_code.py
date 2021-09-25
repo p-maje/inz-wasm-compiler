@@ -5,7 +5,8 @@ TAB = "  "
 function_table = dict()
 current_function: 'Function'
 local_vars = dict()
-
+iterators = set()
+active_loops = 0
 
 class CompilerException(Exception):
     pass
@@ -45,9 +46,12 @@ class Local(Value):
     def get_type(self) -> str:
         if self.type:
             return self.type
-        if self.name not in local_vars:
-            raise CompilerException(f"{self.lineno}: Variable '{self.name}' not declared")
-        self.type = local_vars[self.name].type
+        if self.name in iterators:
+            self.type = "i32"
+        else:
+            if self.name not in local_vars:
+                raise CompilerException(f"{self.lineno}: Variable '{self.name}' not declared")
+            self.type = local_vars[self.name].type
         return self.type
 
 
@@ -145,7 +149,7 @@ class ReturnCommand(Command):
         if current_function.return_type != self.value.get_type():
             raise CompilerException(f"{self.lineno}: Return type of function '{current_function.name}' should be "
                             f"{current_function.return_type}, is {self.value.get_type()}")
-        return self.value.load(depth)
+        return self.value.load(depth) + [depth * TAB + f"return"]
 
 
 class CallCommand(Command):
@@ -178,6 +182,66 @@ class IfCommand(Command):
         return instructions
 
 
+class WhileLoop(Command):
+    def __init__(self, lineno: int, condition: Expression, commands: List[Command]):
+        self.lineno = lineno
+        self.condition = self._invert_condition(condition)
+        self.commands = commands
+
+    @staticmethod
+    def _invert_condition(condition):
+        condition.operation = \
+            f"{'g' if condition.operation[0] == 'l' else 'l'}{'t' if condition.operation[1] == 'e' else 'e'}_s"
+        return condition
+
+    def extract(self, depth: int) -> List[str]:
+        global active_loops
+        active_loops += 1
+        loop_name = f"$~while{active_loops}"
+        instructions = [depth * TAB + f"(loop {loop_name} (block {loop_name}~block"]
+        instructions += self.condition.load(depth + 1)
+        instructions += [(depth + 1) * TAB + f"br_if {loop_name}~block"]
+        for command in self.commands:
+            instructions += command.extract(depth + 1)
+        instructions += [(depth + 1) * TAB + f"br {loop_name}", depth * TAB + f"))"]
+        active_loops -= 1
+        return instructions
+
+
+class ForLoop(Command):
+    def __init__(self, lineno: int, iterator: str, start: Value, stop: Value, direction: str, commands: List[Command]):
+        self.lineno = lineno
+        self.iterator_name = iterator
+        self.start = start
+        self.stop = stop
+        self.direction = direction
+        self.commands = commands
+
+    def extract(self, depth: int) -> List[str]:
+        if self.iterator_name in local_vars:
+            raise CompilerException(f"{self.lineno}: Iterator shadows a local variable {self.iterator_name}")
+        if self.iterator_name in iterators:
+            raise CompilerException(f"{self.lineno}: Iterator shadows a previous iterator {self.iterator_name}")
+        iterators.add(self.iterator_name)
+        iterator = Local(self.lineno, self.iterator_name, "i32")
+        instructions = AssignCommand(self.lineno, iterator, self.start).extract(depth)
+
+        loop_name = f"$~{self.iterator_name}"
+        instructions += [depth * TAB + f"(loop {loop_name} (block {loop_name}~block"]
+        instructions += Expression(
+            self.lineno, (iterator, self.stop), "gt_s" if self.direction == "up" else "lt_s").load(depth + 1)
+        instructions += [(depth + 1) * TAB + f"br_if {loop_name}~block"]
+        for command in self.commands:
+            instructions += command.extract(depth + 1)
+
+        iterator_update = Expression(self.lineno, (iterator, Const(1, "i32")),
+                                     "add" if self.direction == "up" else "sub")
+        instructions += AssignCommand(self.lineno, iterator, iterator_update).extract(depth + 1)
+
+        instructions += [(depth + 1) * TAB + f"br {loop_name}", depth * TAB + f"))"]
+        return instructions
+
+
 class Function:
     def __init__(self, name: str, args: List[Local], locals: List[Local], commands: List[Command], return_type=None):
         self.name = name
@@ -190,21 +254,26 @@ class Function:
         global current_function, local_vars
         current_function = self
         local_vars.clear()
-        instructions = [f'(func ${self.name}']
+        iterators.clear()
+        header = [f'(func ${self.name}']
         if self.args:
-            instructions += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args)]
+            header += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args)]
             local_vars.update({var.name: var for var in self.args})
         if self.return_type is not None:
-            instructions += [TAB + f"(result {self.return_type})"]
+            header += [TAB + f"(result {self.return_type})"]
         if self.locals:
-            instructions += [TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals)]
+            header += [TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals)]
             local_vars.update({var.name: var for var in self.locals})
+        instructions = []
         for command in self.commands:
             instructions.extend(command.extract(1))
             if isinstance(command, ReturnCommand):
                 break
         else:
             pass  # TODO check if it returns
+        if iterators:
+            header += [TAB + " ".join(f"(local ${var} i32)" for var in iterators)]
+        instructions = header + instructions
         instructions.append(")")
         return [TAB + instruction for instruction in instructions]
 
