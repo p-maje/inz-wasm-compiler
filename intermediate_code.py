@@ -8,9 +8,25 @@ local_vars = dict()
 iterators = set()
 active_iterators = set()
 active_loops = 0
+used_mem = 0
+
 
 class CompilerException(Exception):
     pass
+
+
+class Array:
+    """
+    TODO:
+    go through function calls starting with main and add to used mem before generating instructions somehow to know what address to call
+    """
+    def __init__(self, name: str, array_type: str, size: int):
+        self.name = name
+        self.type = array_type
+        self.size = size
+
+    def prepare(self):
+        pass
 
 
 class Value:
@@ -267,7 +283,7 @@ class Function:
         iterators.clear()
         header = [f'(func ${self.name}']
         if self.args:
-            header += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args)]
+            header += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args if not isinstance(var, Array))]
             local_vars.update({var.name: var for var in self.args})
         if self.return_type is not None:
             header += [TAB + f"(result {self.return_type})"]
@@ -296,7 +312,8 @@ class Module:
         global function_table
         instructions = ['(module',
                         TAB + '(func $~write_i32 (import "imports" "write") (param i32))',
-                        TAB + '(func $~write_f32 (import "imports" "write") (param f32))']
+                        TAB + '(func $~write_f32 (import "imports" "write") (param f32))',
+                        TAB + '(memory 1)']
 
         function_table = {func.name: func for func in self.functions}
         for function in self.functions:

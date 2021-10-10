@@ -5,8 +5,10 @@
     <meta charset="UTF-8">
     <title>Compiler</title>
     <link href="https://pagecdn.io/lib/codemirror/5.62.3/codemirror.css" rel="stylesheet">
+    <link href="https://pagecdn.io/lib/codemirror/5.62.3/theme/darcula.min.css" rel="stylesheet">
     <script src="https://pagecdn.io/lib/codemirror/5.62.3/codemirror.js"></script>
     <script src="https://pagecdn.io/lib/codemirror/5.62.3/addon/edit/closebrackets.min.js"></script>
+    <script src="https://pagecdn.io/lib/codemirror/5.62.3/addon/mode/simple.min.js"></script>
     <script src="https://unpkg.com/wast-loader@1.11.1/lib/index.js"></script>
     <style>
         body {
@@ -16,13 +18,12 @@
             box-sizing: border-box;
         }
         .error-line {
-            background: red!important;
-            color: white!important;
+            background: #44475a!important;
         }
         .compilation-error {
             font-size: 0.65rem;
             padding: 4px;
-            color: red;
+            color: #ff5555;
         }
         .editors {
             height: 550px;
@@ -65,19 +66,34 @@
     </div>
     
     <script>
+        CodeMirror.defineSimpleMode("simplemode", {
+          start: [
+            {regex: /(def|int|float)(\s+)(\w+)\(/, token: ["keyword", null, "variable-2"]},
+            {regex: /(?:return|if|for|while|else|write|with|from|to)\b/,
+             token: "keyword"},
+            {regex: /true|false|null|undefined/, token: "atom"},
+            {regex: /-?(?:\d+\.?\d*)/, token: "number"},
+            {regex: /[-+\/*=<>!%]+/, token: "operator"},
+            {regex: /\{/, indent: true},
+            {regex: /\}/, dedent: true},
+            {regex: /[a-z$][\w$]*/, token: "variable"}
+              ]
+        });
         let input = CodeMirror.fromTextArea(document.getElementById('input'), {
+            theme: 'darcula',
             lineNumbers: true,
             lineWrapping: true,
             autoCloseBrackets: true
         });
         input.setSize("", "500px")
         let output = CodeMirror.fromTextArea(document.getElementById('output'), {
+            theme: 'darcula',
             lineNumbers: true,
             lineWrapping: true,
             readOnly: true
         });
         let error = null
-        input.setValue("def main() {\n\twrite 11\n}")
+        input.setValue("def main() {\n\ \ write 11\n}")
         function compile() {
             let code = input.getValue()
             if (error !== null) {

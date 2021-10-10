@@ -1,7 +1,7 @@
 from sly import Lexer, Parser
 
 from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, \
-    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop
+    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array
 
 
 class ImpLexer(Lexer):
@@ -125,11 +125,10 @@ class ImpParser(Parser):
     @_('type PID "[" NUM_INT "]"')
     def declaration(self, p):
         self.local_arrays[p.PID] = p.type
-        return {"type": p.type, "name": p.PID, "size": p.NUM}
+        return Array(p.PID, p.type, p.NUM_INT)
 
     @_('type PID')
     def declaration(self, p):
-        self.locals[p.PID] = p.type
         return Local(p.lineno, p.PID, p.type)
 
     @_('INT', 'FLOAT')
@@ -160,11 +159,11 @@ class ImpParser(Parser):
     def command(self, p):
         return WhileLoop(p.lineno, p.condition, p.commands)
 
-    @_('FOR PID FROM value TO value BEGIN commands END')
+    @_('FOR PID FROM assignable_value TO assignable_value BEGIN commands END')
     def command(self, p):
         return ForLoop(p.lineno, p.PID, p[3], p[5], "up", p[7])
 
-    @_('FOR PID FROM value DOWNTO value BEGIN commands END')
+    @_('FOR PID FROM assignable_value DOWNTO assignable_value BEGIN commands END')
     def command(self, p):
         return ForLoop(p.lineno, p.PID, p[3], p[5], "down", p[7])
 
@@ -188,17 +187,17 @@ class ImpParser(Parser):
     def function_call(self, p):
         return FunctionCall(p.lineno, p.PID, [])
 
-    @_('PID "(" args ")"')
+    @_('PID "(" call_args ")"')
     def function_call(self, p):
-        return FunctionCall(p.lineno, p.PID, p.args)
+        return FunctionCall(p.lineno, p.PID, p.call_args)
 
-    @_('value')
-    def args(self, p):
-        return [p.value]
+    @_('assignable_value')
+    def call_args(self, p):
+        return [p.assignable_value]
 
-    @_('args "," value')
-    def args(self, p):
-        return p.args + [p.value]
+    @_('call_args "," assignable_value')
+    def call_args(self, p):
+        return p.args + [p.assignable_value]
 
     @_('assignable_value')
     def expression(self, p):
@@ -224,27 +223,27 @@ class ImpParser(Parser):
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "rem_s")
 
-    @_('assignable_value EQ assignable_value')
+    @_('expression EQ expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "eq")
 
-    @_('assignable_value NEQ assignable_value')
+    @_('expression NEQ expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "ne")
 
-    @_('assignable_value LT assignable_value')
+    @_('expression LT expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "lt_s")
 
-    @_('assignable_value GT assignable_value')
+    @_('expression GT expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "gt_s")
 
-    @_('assignable_value LEQ assignable_value')
+    @_('expression LEQ expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "le_s")
 
-    @_('assignable_value GEQ assignable_value')
+    @_('expression GEQ expression')
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "ge_s")
 
@@ -270,17 +269,11 @@ class ImpParser(Parser):
 
     @_('PID "[" PID "]"')
     def identifier(self, p):
-        if p[0] in self.local_arrays:
-            if p[2] in self.locals:
-                return []  # TODO
-            raise Exception(f"Unknown variable {p[2]}")
-        raise Exception(f"Unknown array {p[0]}")
+        return
 
     @_('PID "[" NUM_INT "]"')
     def identifier(self, p):
-        if p[0] in self.local_arrays:
-            return []  # TODO
-        raise Exception(f"Unknown array {p[0]}")
+        return
 
     def error(self, token):
         raise Exception(f"{token.lineno}: Syntax error '{token.value}'")
