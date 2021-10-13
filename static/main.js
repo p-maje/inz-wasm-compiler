@@ -4,7 +4,7 @@ function init() {
         start: [
             {regex: /(def|int|float)(\s+)(\w+)\(/, token: ["keyword", null, "variable-2"]},
             {
-                regex: /(?:return|if|for|while|else|write|with|from|to)\b/,
+                regex: /(?:return|if|for|while|else|write|with|from|to|downto)\b/,
                 token: "keyword"
             },
             {regex: /"[^"]*"/, token: "string"},

@@ -159,11 +159,11 @@ class ImpParser(Parser):
     def command(self, p):
         return WhileLoop(p.lineno, p.condition, p.commands)
 
-    @_('FOR PID FROM assignable_value TO assignable_value BEGIN commands END')
+    @_('FOR PID FROM expression TO expression BEGIN commands END')
     def command(self, p):
         return ForLoop(p.lineno, p.PID, p[3], p[5], "up", p[7])
 
-    @_('FOR PID FROM assignable_value DOWNTO assignable_value BEGIN commands END')
+    @_('FOR PID FROM expression DOWNTO expression BEGIN commands END')
     def command(self, p):
         return ForLoop(p.lineno, p.PID, p[3], p[5], "down", p[7])
 
