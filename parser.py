@@ -191,13 +191,13 @@ class ImpParser(Parser):
     def function_call(self, p):
         return FunctionCall(p.lineno, p.PID, p.call_args)
 
-    @_('assignable_value')
+    @_('expression')
     def call_args(self, p):
-        return [p.assignable_value]
+        return [p.expression]
 
-    @_('call_args "," assignable_value')
+    @_('call_args "," expression')
     def call_args(self, p):
-        return p.args + [p.assignable_value]
+        return p.call_args + [p.expression]
 
     @_('assignable_value')
     def expression(self, p):

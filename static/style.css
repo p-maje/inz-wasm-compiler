@@ -1,0 +1,52 @@
+body {
+    background: #333333;
+}
+
+* {
+    box-sizing: border-box;
+    font-size: 18px;
+}
+
+.error-line {
+    background: #44475a !important;
+}
+
+.compilation-error {
+    font-size: 0.65rem;
+    padding: 4px;
+    color: #ff5555;
+}
+
+.editors {
+    margin-top: 50px;
+    height: 650px;
+    display: flex;
+    flex-flow: column wrap;
+    justify-content: space-between;
+    align-content: center;
+    width: 100%;
+}
+
+.editors > * {
+    margin-right: 20px;
+    width: 45%;
+}
+
+textarea {
+    resize: none;
+}
+
+#console {
+    flex-grow: 1;
+    margin-top: 20px;
+    width: 45%;
+    border: 0.25rem solid white;
+    background: inherit;
+    color: white;
+    font-weight: bold;
+    padding: 0.5rem;
+}
+
+.CodeMirror-wrap {
+    border: 0.25rem solid white;
+}
