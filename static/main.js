@@ -1,10 +1,23 @@
-let input, output, error
+let input, output, error, consoleArea
+
+function readValue(type) {
+    consoleArea.value += '? '
+    let val
+    while (true) {
+        val = prompt(type)
+        val = type === "INT"? parseInt(val): parseFloat(val)
+        if (!isNaN(val)) break
+    }
+    consoleArea.value += val.toString() + '\n'
+    return val
+}
+
 function init() {
     CodeMirror.defineSimpleMode("simplemode", {
         start: [
             {regex: /(def|int|float)(\s+)(\w+)\(/, token: ["keyword", null, "variable-2"]},
             {
-                regex: /(?:return|if|for|while|else|write|with|from|to|downto)\b/,
+                regex: /(?:return|if|for|while|else|write|read|with|from|to|downto)\b/,
                 token: "keyword"
             },
             {regex: /"[^"]*"/, token: "string"},
@@ -70,18 +83,22 @@ function compile() {
 
 function run() {
     let code = output.getValue()
-    let console_area = document.getElementById("console")
+    consoleArea = document.getElementById("console")
     let importObject = {
-        imports: {write: (arg) => console_area.value += '> ' + arg + '\n'}
+        imports: {
+            write: (arg) => consoleArea.value += '> ' + arg + '\n',
+            readInt: () => readValue("INT"),
+            readFloat: () => readValue("FLOAT")
+        }
     }
 
-    console_area.value = ''
+    consoleArea.value = ''
     WebAssembly.instantiateStreaming(fetch('/run', {
         method: 'POST',
         body: code,
         response_type: 'application/wasm'
     }), importObject).then(obj => {
         obj.instance.exports.main()
-        console_area.value += 'DONE\n'
+        consoleArea.value += 'DONE\n'
     })
 }

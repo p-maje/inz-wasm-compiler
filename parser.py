@@ -1,7 +1,7 @@
 from sly import Lexer, Parser
 
-from intermediate_code import Local, Const, IOCommand, AssignCommand, Expression, CallCommand, ReturnCommand, \
-    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array
+from intermediate_code import Local, Const, AssignCommand, Expression, CallCommand, ReturnCommand, \
+    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array, ReadCommand, WriteCommand
 
 
 class ImpLexer(Lexer):
@@ -49,12 +49,12 @@ class ImpLexer(Lexer):
 
     PID = r"[_a-z]+"
 
-    @_(r'-?\d+\.\d+')
+    @_(r'\d+\.\d+')
     def NUM_FLOAT(self, t):
         t.value = float(t.value)
         return t
 
-    @_(r'-?\d+')
+    @_(r'\d+')
     def NUM_INT(self, t):
         t.value = int(t.value)
         return t
@@ -68,6 +68,7 @@ class ImpLexer(Lexer):
 
 class ImpParser(Parser):
     tokens = ImpLexer.tokens
+    debugfile = "debug.out"
 
     def __init__(self):
         self.locals = dict()
@@ -123,7 +124,7 @@ class ImpParser(Parser):
         return [p.declaration] + p.nonempty_args
 
     @_('type PID "[" NUM_INT "]"')
-    def declaration(self, p):
+    def array_declaration(self, p):
         self.local_arrays[p.PID] = p.type
         return Array(p.PID, p.type, p.NUM_INT)
 
@@ -169,11 +170,11 @@ class ImpParser(Parser):
 
     @_('READ identifier')
     def command(self, p):
-        return IOCommand(p.lineno, "read", p.identifier)
+        return ReadCommand(p.lineno, p.identifier)
 
     @_('WRITE expression')
     def command(self, p):
-        return IOCommand(p.lineno, "write", p.expression)
+        return WriteCommand(p.lineno, p.expression)
 
     @_('function_call')
     def command(self, p):
@@ -182,6 +183,10 @@ class ImpParser(Parser):
     @_('RETURN expression')
     def command(self, p):
         return ReturnCommand(p.lineno, p.expression)
+
+    @_('RETURN ";"')
+    def command(self, p):
+        return ReturnCommand(p.lineno, None)
 
     @_('PID "(" ")"')
     def function_call(self, p):
@@ -199,27 +204,27 @@ class ImpParser(Parser):
     def call_args(self, p):
         return p.call_args + [p.expression]
 
-    @_('assignable_value')
+    @_('value')
     def expression(self, p):
         return p[0]
 
-    @_('assignable_value "+" assignable_value')
+    @_('value "+" value')
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "add")
 
-    @_('assignable_value "-" assignable_value')
+    @_('value "-" value')
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "sub")
 
-    @_('assignable_value "*" assignable_value')
+    @_('value "*" value')
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "mul")
 
-    @_('assignable_value "/" assignable_value')
+    @_('value "/" value')
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "div_s")
 
-    @_('assignable_value "%" assignable_value')
+    @_('value "%" value')
     def expression(self, p):
         return Expression(p.lineno, (p[0], p[2]), "rem_s")
 
@@ -247,13 +252,21 @@ class ImpParser(Parser):
     def condition(self, p):
         return Expression(p.lineno, (p[0], p[2]), "ge_s")
 
-    @_("value", "function_call")
-    def assignable_value(self, p):
+    @_('function_call')
+    def value(self, p):
         return p[0]
+
+    @_('"-" NUM_INT')
+    def value(self, p):
+        return Const(-int(p[1]), "i32")
 
     @_('NUM_INT')
     def value(self, p):
         return Const(int(p[0]), "i32")
+
+    @_('"-" NUM_FLOAT')
+    def value(self, p):
+        return Const(-float(p[1]), "f32")
 
     @_('NUM_FLOAT')
     def value(self, p):

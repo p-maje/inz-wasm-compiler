@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 TAB = "  "
 function_table = dict()
@@ -38,6 +38,9 @@ class Value:
     def get_type(self) -> str:
         pass
 
+    def get_local(self) -> 'Value':
+        return self
+
 
 class Const(Value):
     def __init__(self, value: int or float, var_type: str):
@@ -56,8 +59,13 @@ class Local(Value):
         self.lineno = lineno
         self.name = name
         self.type = var_type
+        self.initialized = False
 
     def load(self, depth: int) -> List[str]:
+        if not self.initialized and self.name in local_vars:
+            self.initialized = local_vars[self.name].initialized
+            if not self.initialized:
+                raise CompilerException(f"{self.lineno}: Variable '{self.name}' not initialized")
         return [depth * TAB + f"local.get ${self.name}"]
 
     def get_type(self) -> str:
@@ -71,10 +79,12 @@ class Local(Value):
             self.type = local_vars[self.name].type
         return self.type
 
+    def get_local(self) -> 'Value':
+        pass
 
 class ArrayValue(Local):
     array_name: str
-    index: int
+    index: Value
 
     def load(self, depth: int) -> List[str]:
         return []
@@ -87,7 +97,9 @@ class FunctionCall(Value):
         self.args = args
 
     def load(self, depth: int) -> List[str]:
-        function = function_table[self.callee]
+        function = function_table.get(self.callee)
+        if not function:
+            raise CompilerException(f"{self.lineno}: Function '{self.callee}' not found")
         if len(function.args) != len(self.args):
             raise CompilerException(f"{self.lineno}: Function {self.callee} expected {len(function.args)} arguments, got {len(self.args)}")
         for arg, expected in zip(self.args, function.args):
@@ -124,38 +136,7 @@ class Command:
         pass
 
 
-class IOCommand(Command):
-    operation: str
-    value: Value
-
-    def __init__(self, lineno, operation, value):
-        self.lineno = lineno
-        self.operation = operation
-        self.value = value
-
-    def extract(self, depth: int) -> List[str]:
-        val_type = self.value.get_type()
-        if not val_type:
-            raise CompilerException(f"{self.lineno}: Expression has no value")
-        return self.value.load(depth) + [depth * TAB + f"call $~{self.operation}_{val_type}"]
-
-
-class AssignCommand(Command):
-    target: Local
-    value: Value
-
-    def __init__(self, lineno, target, value):
-        self.lineno = lineno
-        self.target = target
-        self.value = value
-
-    def extract(self, depth: int) -> List[str]:
-        if self.target.get_type() != self.value.get_type():
-            raise CompilerException(f"{self.lineno}: Type mismatch")
-        return self.value.load(depth) + [depth * TAB + f"local.set ${self.target.name}"]
-
-
-class ReturnCommand(Command):
+class WriteCommand(Command):
     value: Value
 
     def __init__(self, lineno, value):
@@ -163,10 +144,62 @@ class ReturnCommand(Command):
         self.value = value
 
     def extract(self, depth: int) -> List[str]:
-        if current_function.return_type != self.value.get_type():
+        val_type = self.value.get_type()
+        if not val_type:
+            raise CompilerException(f"{self.lineno}: Expression has no value")
+        return self.value.load(depth) + [depth * TAB + f"call $~write_{val_type}"]
+
+
+class ReadCommand(Command):
+    target: Local
+
+    def __init__(self, lineno, target):
+        self.lineno = lineno
+        self.target = target
+
+    def extract(self, depth: int) -> List[str]:
+        val_type = self.target.get_type()
+        if self.target.name in active_iterators:
+            raise CompilerException(f"{self.lineno}: Assigning to an iterator")
+        if self.target.name in local_vars:
+            local_vars[self.target.name].initialized = True
+        return [depth * TAB + f"call $~read_{val_type}", depth * TAB + f"local.set ${self.target.name}"]
+
+
+class AssignCommand(Command):
+    target: Local
+    value: Value
+
+    def __init__(self, lineno, target, value, loop_operation=False):
+        self.lineno = lineno
+        self.target = target
+        self.value = value
+        self.loop_operation = loop_operation
+
+    def extract(self, depth: int) -> List[str]:
+        if self.target.get_type() != self.value.get_type():
+            raise CompilerException(f"{self.lineno}: Type mismatch")
+        if not self.loop_operation and self.target.name in active_iterators:
+            raise CompilerException(f"{self.lineno}: Assigning to an iterator")
+        if self.target.name in local_vars:
+            local_vars[self.target.name].initialized = True
+        return self.value.load(depth) + [depth * TAB + f"local.set ${self.target.name}"]
+
+
+class ReturnCommand(Command):
+    value: Optional[Value]
+
+    def __init__(self, lineno, value):
+        self.lineno = lineno
+        self.value = value
+
+    def extract(self, depth: int) -> List[str]:
+        value_type = self.value.get_type() if self.value else None
+        if current_function.return_type != value_type:
             raise CompilerException(f"{self.lineno}: Return type of function '{current_function.name}' should be "
                             f"{current_function.return_type}, is {self.value.get_type()}")
-        return self.value.load(depth) + [depth * TAB + f"return"]
+        instructions = self.value.load(depth) if self.value else []
+        return instructions + [depth * TAB + f"return"]
 
 
 class CallCommand(Command):
@@ -243,13 +276,13 @@ class ForLoop(Command):
 
     def extract(self, depth: int) -> List[str]:
         if self.iterator_name in local_vars:
-            raise CompilerException(f"{self.lineno}: Iterator shadows a local variable {self.iterator_name}")
+            raise CompilerException(f"{self.lineno}: Iterator shadows a local variable '{self.iterator_name}'")
         if self.iterator_name in iterators:
-            raise CompilerException(f"{self.lineno}: Iterator shadows a previous iterator {self.iterator_name}")
+            raise CompilerException(f"{self.lineno}: Iterator shadows a previous iterator '{self.iterator_name}'")
         iterators.add(self.iterator_name)
         active_iterators.add(self.iterator_name)
         iterator = Local(self.lineno, self.iterator_name, "i32")
-        instructions = AssignCommand(self.lineno, iterator, self.start).extract(depth)
+        instructions = AssignCommand(self.lineno, iterator, self.start, loop_operation=True).extract(depth)
 
         loop_name = f"$~{self.iterator_name}"
         instructions += [depth * TAB + f"(loop {loop_name} (block {loop_name}~block"]
@@ -261,7 +294,7 @@ class ForLoop(Command):
 
         iterator_update = Expression(self.lineno, (iterator, Const(1, "i32")),
                                      "add" if self.direction == "up" else "sub")
-        instructions += AssignCommand(self.lineno, iterator, iterator_update).extract(depth + 1)
+        instructions += AssignCommand(self.lineno, iterator, iterator_update, loop_operation=True).extract(depth + 1)
 
         instructions += [(depth + 1) * TAB + f"br {loop_name}", depth * TAB + f"))"]
         active_iterators.remove(self.iterator_name)
@@ -284,11 +317,13 @@ class Function:
         header = [f'(func ${self.name}']
         if self.args:
             header += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args if not isinstance(var, Array))]
+            for var in self.args:
+                var.initialized = True
             local_vars.update({var.name: var for var in self.args})
         if self.return_type is not None:
             header += [TAB + f"(result {self.return_type})"]
         if self.locals:
-            header += [TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals)]
+            header += [TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals if not isinstance(var, Array))]
             local_vars.update({var.name: var for var in self.locals})
         instructions = []
         for command in self.commands:
@@ -312,7 +347,9 @@ class Module:
         global function_table
         instructions = ['(module',
                         TAB + '(func $~write_i32 (import "imports" "write") (param i32))',
+                        TAB + '(func $~read_i32 (import "imports" "readInt") (result i32))',
                         TAB + '(func $~write_f32 (import "imports" "write") (param f32))',
+                        TAB + '(func $~read_f32 (import "imports" "readFloat") (result f32))',
                         TAB + '(memory 1)']
 
         function_table = {func.name: func for func in self.functions}
