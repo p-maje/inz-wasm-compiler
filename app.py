@@ -1,10 +1,12 @@
+import os
+import re
+import subprocess
+import time
 import traceback
 
 from flask import Flask, render_template, request, make_response
+
 from parser import parse
-import subprocess
-import time
-import os, re
 
 app = Flask(__name__)
 

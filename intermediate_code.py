@@ -1,14 +1,14 @@
 from abc import abstractmethod
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
 TAB = "  "
 function_table = dict()
 current_function: 'Function'
 local_vars = dict()
+arrays: Dict[str, 'Array'] = dict()
 iterators = set()
 active_iterators = set()
 active_loops = 0
-used_mem = 0
 
 
 class CompilerException(Exception):
@@ -16,23 +16,35 @@ class CompilerException(Exception):
 
 
 class Array:
-    """
-    TODO:
-    go through function calls starting with main and add to used mem before generating instructions somehow to know what address to call
-    """
-    def __init__(self, name: str, array_type: str, size: int):
+    def __init__(self, lineno: int, name: str, array_type: str, size: int):
+        self.lineno = lineno
         self.name = name
         self.type = array_type
         self.size = size
+        self.start_pointer = 0
 
     def prepare(self):
-        pass
+        global arrays
+        if self.name in arrays:
+            raise CompilerException(f"{self.lineno}: Repeated declaration of array '{self.name}'")
+        self.start_pointer = sum(arr.size for arr in arrays.values()) * 4
+        arrays[self.name] = self
+
+    def load_address_at(self, depth: int, lineno: int, index: 'Value'):
+        if not index.get_type() == "i32":
+            raise CompilerException(f"{lineno}: Index must be an integer")
+        if isinstance(index, Const):
+            return Const(index.value * 4 + self.start_pointer, "i32").load(depth)
+        instructions = ["i32.const 4", "i32.mul"]
+        if self.start_pointer:
+            instructions += [f"i32.const {self.start_pointer}", "i32.add"]
+        return index.load(depth) + [depth * TAB + instruction for instruction in instructions]
 
 
 class Value:
     @abstractmethod
     def load(self, depth: int) -> List[str]:
-        pass
+        return []
 
     @abstractmethod
     def get_type(self) -> str:
@@ -79,15 +91,37 @@ class Local(Value):
             self.type = local_vars[self.name].type
         return self.type
 
-    def get_local(self) -> 'Value':
-        pass
+    def store(self, depth: int, value: Value) -> List[str]:
+        if self.name in local_vars:
+            local_vars[self.name].initialized = True
+        return value.load(depth) + [depth * TAB + f"local.set ${self.name}"]
+
 
 class ArrayValue(Local):
-    array_name: str
-    index: Value
+    def __init__(self, lineno: int, array_name: str, index: Value):
+        super().__init__(lineno, array_name)
+        self.lineno = lineno
+        self.name = array_name
+        self.index = index
+        self.array = None
 
     def load(self, depth: int) -> List[str]:
-        return []
+        self._check_arrays_existence()
+        return self.array.load_address_at(depth, self.lineno, self.index) + [depth * TAB + f"{self.array.type}.load"]
+
+    def get_type(self) -> str:
+        self._check_arrays_existence()
+        return self.array.type
+
+    def store(self, depth: int, value: Value) -> List[str]:
+        return self.array.load_address_at(depth, self.lineno, self.index) + value.load(depth) + \
+               [depth * TAB + f"{self.array.type}.store"]
+
+    def _check_arrays_existence(self):
+        if not self.array:
+            self.array = arrays.get(self.name)
+            if not self.array:
+                raise CompilerException(f"{self.lineno}: Array '{self.name}' not declared")
 
 
 class FunctionCall(Value):
@@ -101,10 +135,12 @@ class FunctionCall(Value):
         if not function:
             raise CompilerException(f"{self.lineno}: Function '{self.callee}' not found")
         if len(function.args) != len(self.args):
-            raise CompilerException(f"{self.lineno}: Function {self.callee} expected {len(function.args)} arguments, got {len(self.args)}")
+            raise CompilerException(f"{self.lineno}: Function {self.callee} expected {len(function.args)} arguments, "
+                                    f"got {len(self.args)}")
         for arg, expected in zip(self.args, function.args):
             if arg.get_type() != expected.get_type():
-                raise CompilerException(f"{self.lineno}: Argument {expected.name} is of type {expected.get_type()}, got {arg.get_type()}")
+                raise CompilerException(f"{self.lineno}: Argument {expected.name} is of type {expected.get_type()}, "
+                                        f"got {arg.get_type()}")
         return [instruction for arg in self.args for instruction in arg.load(depth)] + \
                [depth * TAB + f"call ${self.callee}"]
 
@@ -127,7 +163,12 @@ class Expression(Value):
     def get_type(self) -> str:
         if self.operands[0].get_type() != self.operands[1].get_type():
             raise CompilerException(f"{self.lineno}: Type mismatch")
-        return self.operands[0].get_type()
+        expr_type = self.operands[0].get_type()
+        if expr_type == "f32" and self.operation.endswith("_s"):
+            self.operation = self.operation[:-2]
+            if self.operation == "rem":
+                raise CompilerException(f"{self.lineno}: Operation '%' is not defined for float values")
+        return expr_type
 
 
 class Command:
@@ -163,7 +204,9 @@ class ReadCommand(Command):
             raise CompilerException(f"{self.lineno}: Assigning to an iterator")
         if self.target.name in local_vars:
             local_vars[self.target.name].initialized = True
-        return [depth * TAB + f"call $~read_{val_type}", depth * TAB + f"local.set ${self.target.name}"]
+        read_call = FunctionCall(self.lineno, f"~read_{val_type}", [])
+        read_call.load = lambda d: [TAB * d + f"call $~read_{val_type}"]
+        return self.target.store(depth, read_call)
 
 
 class AssignCommand(Command):
@@ -181,9 +224,7 @@ class AssignCommand(Command):
             raise CompilerException(f"{self.lineno}: Type mismatch")
         if not self.loop_operation and self.target.name in active_iterators:
             raise CompilerException(f"{self.lineno}: Assigning to an iterator")
-        if self.target.name in local_vars:
-            local_vars[self.target.name].initialized = True
-        return self.value.load(depth) + [depth * TAB + f"local.set ${self.target.name}"]
+        return self.target.store(depth, self.value)
 
 
 class ReturnCommand(Command):
@@ -197,7 +238,7 @@ class ReturnCommand(Command):
         value_type = self.value.get_type() if self.value else None
         if current_function.return_type != value_type:
             raise CompilerException(f"{self.lineno}: Return type of function '{current_function.name}' should be "
-                            f"{current_function.return_type}, is {self.value.get_type()}")
+                                    f"{current_function.return_type}, is {self.value.get_type()}")
         instructions = self.value.load(depth) if self.value else []
         return instructions + [depth * TAB + f"return"]
 
@@ -275,9 +316,10 @@ class ForLoop(Command):
         self.commands = commands
 
     def extract(self, depth: int) -> List[str]:
+        global active_iterators
         if self.iterator_name in local_vars:
             raise CompilerException(f"{self.lineno}: Iterator shadows a local variable '{self.iterator_name}'")
-        if self.iterator_name in iterators:
+        if self.iterator_name in active_iterators:
             raise CompilerException(f"{self.lineno}: Iterator shadows a previous iterator '{self.iterator_name}'")
         iterators.add(self.iterator_name)
         active_iterators.add(self.iterator_name)
@@ -302,28 +344,43 @@ class ForLoop(Command):
 
 
 class Function:
-    def __init__(self, name: str, args: List[Local], locals: List[Local], commands: List[Command], return_type=None):
+    def __init__(self, lineno: int, name: str, args: List[Local], locals: List[Local], commands: List[Command],
+                 return_type=None):
+        self.lineno = lineno
         self.name = name
         self.args = args
         self.locals = locals
         self.commands = commands
         self.return_type = return_type
 
+    def _check_number_of_declarations(self, declarations: List[Local]):
+        declared = set(local_vars.keys())
+        for var in declarations:
+            if var.name in declared:
+                raise CompilerException(f"{self.lineno}: Redeclaration of '{var.name}'")
+            declared.add(var.name)
+        return declared
+
     def generate_code(self) -> List[str]:
-        global current_function, local_vars
+        global current_function, local_vars, iterators, active_iterators
         current_function = self
         local_vars.clear()
         iterators.clear()
+        active_iterators.clear()
         header = [f'(func ${self.name}']
         if self.args:
-            header += [TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args if not isinstance(var, Array))]
+            self._check_number_of_declarations(self.args)
+            header += [
+                TAB + " ".join(f"(param ${var.name} {var.type})" for var in self.args if not isinstance(var, Array))]
             for var in self.args:
                 var.initialized = True
             local_vars.update({var.name: var for var in self.args})
         if self.return_type is not None:
             header += [TAB + f"(result {self.return_type})"]
         if self.locals:
-            header += [TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals if not isinstance(var, Array))]
+            self._check_number_of_declarations(self.locals)
+            header += [
+                TAB + " ".join(f"(local ${var.name} {var.type})" for var in self.locals if not isinstance(var, Array))]
             local_vars.update({var.name: var for var in self.locals})
         instructions = []
         for command in self.commands:
@@ -331,7 +388,8 @@ class Function:
             if isinstance(command, ReturnCommand):
                 break
         else:
-            pass  # TODO check if it returns
+            if self.return_type:
+                raise CompilerException(f"{self.lineno}: Function needs to end with an explicit return statement")
         if iterators:
             header += [TAB + " ".join(f"(local ${var} i32)" for var in iterators)]
         instructions = header + instructions
@@ -340,11 +398,12 @@ class Function:
 
 
 class Module:
-    def __init__(self, functions: List[Function]):
+    def __init__(self, array_declarations: List[Array], functions: List[Function]):
+        self.arrays = array_declarations
         self.functions = functions
 
     def generate_code(self) -> str:
-        global function_table
+        global function_table, arrays
         instructions = ['(module',
                         TAB + '(func $~write_i32 (import "imports" "write") (param i32))',
                         TAB + '(func $~read_i32 (import "imports" "readInt") (result i32))',
@@ -352,6 +411,9 @@ class Module:
                         TAB + '(func $~read_f32 (import "imports" "readFloat") (result f32))',
                         TAB + '(memory 1)']
 
+        arrays = dict()
+        for array in self.arrays:
+            array.prepare()
         function_table = {func.name: func for func in self.functions}
         for function in self.functions:
             instructions += function.generate_code()

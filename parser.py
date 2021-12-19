@@ -1,26 +1,23 @@
 from sly import Lexer, Parser
 
 from intermediate_code import Local, Const, AssignCommand, Expression, CallCommand, ReturnCommand, \
-    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array, ReadCommand, WriteCommand
+    Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array, ReadCommand, WriteCommand, ArrayValue
 
 
 class ImpLexer(Lexer):
-    # @_(r'\[[^\]]*\]')
-    # def ignore_comment(self, t):
-    #     self.lineno += t.value.count('\n')
-
     @_(r'\n+')
     def ignore_newline(self, t):
         self.lineno += len(t.value)
 
     tokens = {DEF, WITH, MAIN, BEGIN, END, PID, NUM_FLOAT, NUM_INT, IF, ELSE, WHILE, FOR, FROM, TO,
-              DOWNTO, READ, WRITE, RETURN, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT}
+              DOWNTO, READ, WRITE, RETURN, EQ, NEQ, GT, LT, GEQ, LEQ, GETS, INT, FLOAT, ARRAYS}
 
     DEF = r"def"
     WITH = r"with"
     BEGIN = r"{"
     INT = r"int"
     FLOAT = r"float"
+    ARRAYS = r"arrays"
 
     END = r"}"
 
@@ -47,7 +44,7 @@ class ImpLexer(Lexer):
     GETS = r"="
     MAIN = r"main"
 
-    PID = r"[_a-z]+"
+    PID = r"[_A-Za-z]+"
 
     @_(r'\d+\.\d+')
     def NUM_FLOAT(self, t):
@@ -68,36 +65,34 @@ class ImpLexer(Lexer):
 
 class ImpParser(Parser):
     tokens = ImpLexer.tokens
-    debugfile = "debug.out"
 
     def __init__(self):
         self.locals = dict()
-        self.local_arrays = dict()
         self.code = None
 
-    @_('procedures main')
+    @_('array_declarations functions main')
     def program(self, p):
-        return Module(p.procedures + [p.main])
+        return Module(p.array_declarations, p.functions + [p.main])
 
     @_('')
-    def procedures(self, p):
+    def functions(self, p):
         return []
 
-    @_('procedures procedure')
-    def procedures(self, p):
+    @_('functions function')
+    def functions(self, p):
         return p[0] + [p[1]]
 
     @_('DEF PID args declarations BEGIN commands END')
-    def procedure(self, p):
-        return Function(p.PID, p.args, p.declarations, p.commands)
+    def function(self, p):
+        return Function(p.lineno, p.PID, p.args, p.declarations, p.commands)
 
     @_('type PID args declarations BEGIN commands END')
-    def procedure(self, p):
-        return Function(p.PID, p.args, p.declarations, p.commands, p.type)
+    def function(self, p):
+        return Function(p.lineno, p.PID, p.args, p.declarations, p.commands, p.type)
 
     @_('DEF MAIN "(" ")" declarations BEGIN commands END')
     def main(self, p):
-        return Function("main", [], p.declarations, p.commands)
+        return Function(p.lineno, "main", [], p.declarations, p.commands)
 
     @_('')
     def declarations(self, p):
@@ -123,10 +118,25 @@ class ImpParser(Parser):
     def nonempty_args(self, p):
         return [p.declaration] + p.nonempty_args
 
+    @_('')
+    def array_declarations(self, p):
+        return []
+
+    @_('ARRAYS array_declaration more_array_declarations')
+    def array_declarations(self, p):
+        return [p.array_declaration] + p.more_array_declarations
+
+    @_('"," array_declaration more_array_declarations')
+    def more_array_declarations(self, p):
+        return [p.array_declaration] + p.more_array_declarations
+
+    @_('')
+    def more_array_declarations(self, p):
+        return []
+
     @_('type PID "[" NUM_INT "]"')
     def array_declaration(self, p):
-        self.local_arrays[p.PID] = p.type
-        return Array(p.PID, p.type, p.NUM_INT)
+        return Array(p.lineno, p.PID, p.type, p.NUM_INT)
 
     @_('type PID')
     def declaration(self, p):
@@ -280,13 +290,9 @@ class ImpParser(Parser):
     def identifier(self, p):
         return Local(p.lineno, p.PID)
 
-    @_('PID "[" PID "]"')
+    @_('PID "[" expression "]"')
     def identifier(self, p):
-        return
-
-    @_('PID "[" NUM_INT "]"')
-    def identifier(self, p):
-        return
+        return ArrayValue(p.lineno, p.PID, p.expression)
 
     def error(self, token):
         raise Exception(f"{token.lineno}: Syntax error '{token.value}'")
