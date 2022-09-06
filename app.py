@@ -1,12 +1,12 @@
-import os
 import re
 import subprocess
-import time
 import traceback
+import time
 
 from flask import Flask, render_template, request, make_response
+from pathlib import Path
 
-from parser import parse
+from compiler import parse, CompilerException
 
 app = Flask(__name__)
 
@@ -23,7 +23,7 @@ def compile_code():
     if code:
         try:
             return parse(code), 200
-        except Exception as e:
+        except CompilerException as e:
             print(traceback.format_exc())
             if re.match(r"\d+:", str(e)):
                 return str(e), 400
@@ -34,14 +34,14 @@ def compile_code():
 @app.route('/run', methods=["POST"])
 def run_code():
     code = request.get_data(as_text=True)
-    tmp_file = f"tmp/{re.sub('[^a-zA-Z0-9]', '_', request.host)}_{time.time_ns()}.wat"
+    tmp_path = Path("tmp")
+    tmp_path.mkdir(exist_ok=True)
     if code:
-        with open(tmp_file, 'x') as f:
-            f.write(code)
+        tmp_file = tmp_path / f"{re.sub('[^a-zA-Z0-9]', '_', request.host)}_{time.time_ns()}.wat"
+        tmp_file.write_text(code)
         result = subprocess.run(["wat2wasm", tmp_file, "-o", "/dev/stdout"], stdout=subprocess.PIPE)
         binary = result.stdout
-        os.remove(tmp_file)
-
+        tmp_file.unlink()
         resp = make_response(binary, 200)
         resp.mimetype = 'application/wasm'
         return resp

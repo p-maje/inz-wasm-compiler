@@ -1,6 +1,7 @@
 from sly import Lexer, Parser
 
-from intermediate_code import Local, Const, AssignCommand, Expression, CallCommand, ReturnCommand, \
+from compiler.common import CompilerException
+from compiler.intermediate_code import Local, Const, AssignCommand, Expression, CallCommand, ReturnCommand, \
     Function, Module, FunctionCall, IfCommand, ForLoop, WhileLoop, Array, ReadCommand, WriteCommand, ArrayValue
 
 
@@ -57,7 +58,7 @@ class ImpLexer(Lexer):
         return t
 
     def error(self, t):
-        raise Exception(f"{t.lineno}: Illegal character '{t.value[0]}'")
+        raise CompilerException(f"{t.lineno}: Illegal character '{t.value[0]}'")
 
     literals = {'+', '-', '*', '/', '%', ',', ';', '[', ']', '(', ')'}
     ignore = ' \t'
@@ -295,7 +296,7 @@ class ImpParser(Parser):
         return ArrayValue(p.lineno, p.PID, p.expression)
 
     def error(self, token):
-        raise Exception(f"{token.lineno}: Syntax error '{token.value}'")
+        raise CompilerException(f"{token.lineno}: Syntax error '{token.value}'")
 
 
 def parse(code: str):

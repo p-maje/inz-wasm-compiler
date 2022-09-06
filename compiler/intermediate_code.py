@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from typing import List, Tuple, Optional, Dict
 
+from compiler.common import CompilerException
+
 TAB = "  "
 function_table = dict()
 current_function: 'Function'
@@ -9,10 +11,6 @@ arrays: Dict[str, 'Array'] = dict()
 iterators = set()
 active_iterators = set()
 active_loops = 0
-
-
-class CompilerException(Exception):
-    pass
 
 
 class Array:
