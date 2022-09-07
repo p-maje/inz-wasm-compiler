@@ -1,22 +1,20 @@
 import re
-import subprocess
 import traceback
-import time
+import wasmer
 
 from flask import Flask, render_template, request, make_response
-from pathlib import Path
 
 from compiler import parse, CompilerException
 
 app = Flask(__name__)
 
 
-@app.route('/')
+@app.route("/")
 def hello_world():
     return render_template("base.html")
 
 
-@app.route('/compile', methods=["POST"])
+@app.route("/compile", methods=["POST"])
 def compile_code():
     code = request.get_data(as_text=True)
     print(code)
@@ -31,22 +29,16 @@ def compile_code():
     return code, 400
 
 
-@app.route('/run', methods=["POST"])
+@app.route("/run", methods=["POST"])
 def run_code():
     code = request.get_data(as_text=True)
-    tmp_path = Path("tmp")
-    tmp_path.mkdir(exist_ok=True)
     if code:
-        tmp_file = tmp_path / f"{re.sub('[^a-zA-Z0-9]', '_', request.host)}_{time.time_ns()}.wat"
-        tmp_file.write_text(code)
-        result = subprocess.run(["wat2wasm", tmp_file, "-o", "/dev/stdout"], stdout=subprocess.PIPE)
-        binary = result.stdout
-        tmp_file.unlink()
+        binary = wasmer.wat2wasm(code)
         resp = make_response(binary, 200)
-        resp.mimetype = 'application/wasm'
+        resp.mimetype = "application/wasm"
         return resp
     return code, 400
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run()
