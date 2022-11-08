@@ -7,7 +7,7 @@ WebAssembly is a relatively new element of the web platform -- a compilation tar
 The compiler was created as my engineer's thesis project in 2021.
 
 <p align="center">
-<img src="readme/main_window.gif" alt="An animated image showing the app's main window." style="width:60%;"/>
+<img src="readme/main_window.gif" alt="An animated image showing the app's main window."/>
 </p>
 
 ## App features
